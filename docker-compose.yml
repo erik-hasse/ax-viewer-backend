@@ -1,0 +1,30 @@
+version: "3.9"
+services:
+  api:
+    build: backend
+    ports:
+      - "8000:80"
+    volumes:
+      - /app/static:/app/static
+    container_name: api
+    networks:
+      main:
+        aliases:
+          - api
+
+  frontend:
+    build: frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    volumes:
+      - /app/static:/app/static
+    container_name: frontend
+    networks:
+      main:
+        aliases:
+          - frontend
+
+networks:
+  main:
