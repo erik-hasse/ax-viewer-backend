@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy.optimize
+from scipy.spatial import ConvexHull
 
 
 def get_cumulative_time(df):
@@ -24,6 +25,88 @@ def get_cumulative_time(df):
         df['Elapsed Time (ms)']
         + df['Lap'].map(cumulative_lap_times)
     )
+
+
+def minimum_bounding_rectangle(points):
+    """
+    Find the smallest bounding rectangle for a set of points.
+    Returns a set of points representing the corners of the bounding box.
+    :param points: an nx2 matrix of coordinates
+    :rval: an nx2 matrix of coordinates
+    """
+    pi2 = np.pi/2.
+
+    # get the convex hull for the points
+    hull_points = points[ConvexHull(points).vertices]
+
+    # calculate edge angles
+    edges = np.zeros((len(hull_points)-1, 2))
+    edges = hull_points[1:] - hull_points[:-1]
+
+    angles = np.zeros((len(edges)))
+    angles = np.arctan2(edges[:, 1], edges[:, 0])
+
+    angles = np.abs(np.mod(angles, pi2))
+    angles = np.unique(angles)
+
+    # find rotation matrices
+    rotations = np.vstack([
+        np.cos(angles),
+        np.cos(angles-pi2),
+        np.cos(angles+pi2),
+        np.cos(angles)]).T
+    rotations = rotations.reshape((-1, 2, 2))
+
+    # apply rotations to the hull
+    rot_points = np.dot(rotations, hull_points.T)
+
+    # find the bounding points
+    min_x = np.nanmin(rot_points[:, 0], axis=1)
+    max_x = np.nanmax(rot_points[:, 0], axis=1)
+    min_y = np.nanmin(rot_points[:, 1], axis=1)
+    max_y = np.nanmax(rot_points[:, 1], axis=1)
+
+    # find the box with the best area
+    areas = (max_x - min_x) * (max_y - min_y)
+    best_idx = np.argmin(areas)
+
+    # return the best box
+    x1 = max_x[best_idx]
+    x2 = min_x[best_idx]
+    y1 = max_y[best_idx]
+    y2 = min_y[best_idx]
+    r = rotations[best_idx]
+
+    rval = np.zeros((4, 2))
+    rval[0] = np.dot([x1, y2], r)
+    rval[1] = np.dot([x2, y2], r)
+    rval[2] = np.dot([x2, y1], r)
+    rval[3] = np.dot([x1, y1], r)
+
+    return rval
+
+
+def rotate(p, origin=(0, 0), angle=0):
+    R = np.array([[np.cos(angle), -np.sin(angle)],
+                  [np.sin(angle),  np.cos(angle)]])
+    o = np.atleast_2d(origin)
+    p = np.atleast_2d(p)
+    return np.squeeze((R @ (p.T-o.T) + o.T).T)
+
+
+def best_rotation(p):
+    corners = minimum_bounding_rectangle(p)
+    p0 = corners[corners[:, 0].argmin()]
+    p1 = corners[corners[:, 1].argmin()]
+    p2 = corners[corners[:, 0].argmax()]
+    left_legs = p0-p1
+    right_legs = p2-p1
+    if np.sqrt(np.sum(left_legs**2)) < np.sqrt(np.sum(right_legs**2)):
+        theta = np.pi/2 - np.arctan2(*left_legs[::-1])
+    else:
+        theta = np.pi/2 - np.arctan2(*right_legs[::-1])
+    print(theta)
+    return rotate(p, angle=theta).T
 
 
 class Telemetry:
@@ -75,19 +158,25 @@ class Telemetry:
         if self._df is None:
             df = pd.read_csv(self._telem_path)
             df['Total Elapsed Time (ms)'] = get_cumulative_time(df)
-            x0, y0 = df[['Longitude (decimal)', 'Latitude (decimal)']].min()
-            s = (
-                df[['Longitude (decimal)', 'Latitude (decimal)']].max()
-                - (x0, y0)
-            ).max()
+            try:
+                rotated = best_rotation(
+                    df[
+                        ['Longitude (decimal)', 'Latitude (decimal)']
+                    ].to_numpy()
+                )
+            except Exception:
+                rotated = df[
+                    ['Longitude (decimal)', 'Latitude (decimal)']
+                ].to_numpy().T
+            x0, y0 = rotated.min(axis=1)
+            s = (rotated.max(axis=1) - (x0, y0)).max()
             fns = {
                 'Longitude': lambda x: (100/s)*(x - x0),
                 'Latitude': lambda y: (100/s)*(s + y0 - y)
             }
-            for t in ['Longitude', 'Latitude']:
-                source = f'{t} (decimal)'
+            for i, t in enumerate(['Longitude', 'Latitude']):
                 dest = f'{t} (relative)'
-                df[dest] = fns[t](df[source])
+                df[dest] = fns[t](rotated[i])
                 df[dest] -= df[dest].min()
                 df[dest] += 5
 

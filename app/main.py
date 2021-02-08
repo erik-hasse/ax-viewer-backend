@@ -102,6 +102,7 @@ async def get_telemetry_at_time(timestamp: str, telemetry_time: int) -> dict:
 @app.get('/map/{timestamp}', tags=['telemetry'])
 async def get_map(timestamp: str) -> dict:
     df = telemetry[urllib.parse.unquote_plus(timestamp)].df
+    df = df[df['Lap'] == 0]
     return {
         k.lower(): df[f'{k} (relative)'].to_list()
         for k in ['Longitude', 'Latitude']
