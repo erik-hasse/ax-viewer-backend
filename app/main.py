@@ -1,6 +1,8 @@
 from pathlib import Path
+import requests
 import urllib
 
+import bs4
 from fastapi import BackgroundTasks, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,19 +25,29 @@ app.add_middleware(
 )
 
 
-def get_data(path):
-    path = Path(path)
-    telemetry_files = sorted([
-        p for p in path.iterdir()
-        if p.suffix == '.csv' and p.stem.startswith('telemetry-v1')
-    ])
-    video_files = sorted([
-        p for p in path.iterdir()
-        if p.suffix == '.mp4' and p.stem.startswith('laps')
-    ])
+def get_data(prod=True):
+    if prod:
+        base_url = 'http://teslausb.local/static_files/'
+        data = [f['name'] for f in requests.get(base_url).json()]
+    else:
+        base_url = 'http://localhost:8000/'
+        soup = bs4.BeautifulSoup(
+            requests.get(base_url).content, features='lxml'
+        )
+        data = [x.contents[0] for x in soup.select('a')]
+
+    telemetry_files = sorted(
+        base_url + f for f in data
+        if f.endswith('.csv') and f.startswith('telemetry-v1')
+    )
+    video_files = sorted(
+        base_url + f for f in data
+        if f.endswith('.mp4') and f.startswith('laps')
+    )
+
     # Assume for now now that there are an equal number of each file
     return {
-        f[1].stem.removeprefix('laps-'): f
+        f[1].removeprefix(base_url + 'laps-').removesuffix('.mp4'): f
         for f in zip(telemetry_files, video_files)
     }
 
@@ -54,7 +66,7 @@ async def read_root() -> dict:
 
 @app.get('/telemetry', tags=['telemetry'])
 async def get_timestamps(background_tasks: BackgroundTasks) -> dict:
-    new_data = get_data(static)
+    new_data = get_data()
     telemetry.update({
         k: Telemetry(*p)
         for k, p in new_data.items()
