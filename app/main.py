@@ -5,6 +5,7 @@ import urllib
 import bs4
 from fastapi import BackgroundTasks, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import paramiko
 
 from app.telemetry import Telemetry
 
@@ -62,6 +63,19 @@ telemetry = {
 @app.get('/', tags=['root'])
 async def read_root() -> dict:
     return {'message': 'Track mode viewer.'}
+
+
+@app.get('/force_sync', tags=['sync'])
+async def force_sync() -> dict:
+    # Force a sync from the car
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect('teslausb.local', username='pi')
+    stdin, stdout, stderr = ssh.exec_command('sudo /root/bin/force_sync.sh')
+    stdout.channel.settimeout(60)
+    stdout.channel.recv_exit_status()
+    ssh.close()
+    return {'message': 'Syncing'}
 
 
 @app.get('/telemetry', tags=['telemetry'])
