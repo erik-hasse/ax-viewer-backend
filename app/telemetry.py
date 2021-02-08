@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import requests
 
 import cv2
 import matplotlib.pyplot as plt
@@ -24,12 +25,27 @@ def get_cumulative_time(df):
 
 
 class Telemetry:
-    def __init__(self, telem_path, video_path, make_plot=True):
-        self._telem_path = Path(telem_path)
-        self._video_path = Path(video_path)
+    def __init__(self, telem_path, video_path, local_path, make_plot=True):
+        self._local_path = Path(local_path)
+
+        if video_path.startswith('http'):
+            self._video_path = self._local_path / video_path.split('/')[-1]
+            if not self._video_path.exists():
+                self._video_path.write_bytes(requests.get(video_path).content)
+        else:
+            self._video_path = Path(video_path)
+
+        if telem_path.startswith('http'):
+            self._telem_path = self._local_path / telem_path.split('/')[-1]
+            if not self._telem_path.exists():
+                self._telem_path.write_bytes(requests.get(telem_path).content)
+        else:
+            self._telem_path = Path(telem_path)
+
+        self._video_name = self._video_path.stem
 
         self._param_path = (
-            self._video_path.parent / (self._video_path.stem + '.json')
+            self._local_path / (self._video_name + '.json')
         )
         if not self._param_path.exists():
             json.dump({}, self._param_path.open('w'))

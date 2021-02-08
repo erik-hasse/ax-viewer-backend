@@ -54,8 +54,8 @@ def get_data(prod=True):
 
 static = Path('/app/static')
 telemetry = {
-    k: Telemetry(*p)
-    for k, p in get_data(static).items()
+    k: Telemetry(*p, local_path=static)
+    for k, p in get_data().items()
 }
 
 
@@ -68,7 +68,7 @@ async def read_root() -> dict:
 async def get_timestamps(background_tasks: BackgroundTasks) -> dict:
     new_data = get_data()
     telemetry.update({
-        k: Telemetry(*p)
+        k: Telemetry(*p, local_path=static)
         for k, p in new_data.items()
         if k not in telemetry
     })
