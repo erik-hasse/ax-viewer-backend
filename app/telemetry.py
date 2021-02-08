@@ -186,23 +186,11 @@ class Telemetry:
     @property
     def best_offset(self):
         if self._best_offset is None:
-            o = scipy.optimize.brute(
-                lambda x: 1-self.test_offset(x[0])[0],
-                ranges=[(-1000, 5000)],
-                Ns=11,
-                finish=None
+            o = scipy.optimize.differential_evolution(
+                self.optimizer, [(0, 8000)],
+                popsize=5, maxiter=10, polish=False
             )
-            o = scipy.optimize.brute(
-                lambda x: 1-self.test_offset(x[0])[0],
-                ranges=[(o-600, o+600)],
-                finish=None
-            )
-            self._best_offset = scipy.optimize.brute(
-                lambda x: 1-self.test_offset(x[0])[0],
-                ranges=[(o-240, o+240)],
-                Ns=11,
-                finish=None
-            )
+            self._best_offset = o.x[0]
             self.update_json()
         return self._best_offset
 
@@ -257,6 +245,11 @@ class Telemetry:
         A, res, _, _ = np.linalg.lstsq(X, y, rcond=None)
         r2 = 1 - res / (y.size * y.var())
         return r2[0], train, np.dot(X, A.reshape(-1, 1))
+
+    def optimizer(self, x):
+        y = self.test_offset(x[0])[0]
+        print(f'{x[0]=}, {y=}')
+        return 1-y
 
     @property
     def best_fit_plot(self):
