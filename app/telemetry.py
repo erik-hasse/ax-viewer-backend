@@ -1,3 +1,5 @@
+import base64
+import io
 import json
 from pathlib import Path
 import requests
@@ -56,12 +58,9 @@ class Telemetry:
         self._best_offset = d.get('best_offset')
         self._diffs = None
         self._df = None
+        self._best_fit_plot = None
         if make_plot:
-            plot_path = (
-                self._video_path.parent
-                / (f'plot{self._video_path.stem.removeprefix("laps")}.png')
-            )
-            self.best_fit_plot().savefig(plot_path)
+            self.best_fit_plot
 
     @property
     def frame_length(self):
@@ -170,15 +169,22 @@ class Telemetry:
         r2 = 1 - res / (y.size * y.var())
         return r2[0], train, np.dot(X, A.reshape(-1, 1))
 
+    @property
     def best_fit_plot(self):
+        if self._best_fit_plot is not None:
+            return self._best_fit_plot
         fig, [ax, ax1] = plt.subplots(nrows=2, figsize=(9, 12))
         _, train, preds = self.test_offset(self.best_offset)
         train.index = train.index / 1000
 
+        fig.suptitle('Best fit plot', fontsize=16)
+        ax.set_title('Frame difference')
         ax.plot(train['diffs'])
         ax.plot(train.index, preds)
         ax.set_ylabel('RMS frame difference')
 
+        ax1.sharex(ax)
+        ax1.set_title('Features')
         ax1.set_xlabel('Time (s)')
         ax1.set_ylabel('Speed (MPH)')
         ax1.plot(train['Speed (MPH)'])
@@ -187,4 +193,10 @@ class Telemetry:
         ax2.set_ylabel('abs(Steering angle) (deg)')
         ax2.plot(train['Steering Angle (deg)'], color='orange')
 
-        return fig
+        fig.tight_layout()
+
+        img = io.BytesIO()
+        fig.savefig(img, format='png')
+        img.seek(0)
+        self._best_fit_plot = base64.b64encode(img.read())
+        return self._best_fit_plot.decode()

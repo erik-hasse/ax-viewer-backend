@@ -81,6 +81,12 @@ async def get_telemetry(timestamp: str) -> dict:
     return df.to_dict()
 
 
+@app.get('/fit_plot/{timestamp}', tags=['telemetry'])
+async def get_plots(timestamp: str) -> dict:
+    t = telemetry[urllib.parse.unquote_plus(timestamp)]
+    return {'img': t.best_fit_plot}
+
+
 @app.get('/telemetry/{timestamp}/{telemetry_time}', tags=['telemetry'])
 async def get_telemetry_at_time(timestamp: str, telemetry_time: int) -> dict:
     t = telemetry[urllib.parse.unquote_plus(timestamp)]
